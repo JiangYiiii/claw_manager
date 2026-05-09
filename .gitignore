@@ -1,0 +1,36 @@
+# 环境变量
+.env
+.env.local
+.env.tmp
+
+# AI / IDE 工作目录
+.claude/
+.cursor/
+
+# 日志文件
+*.log
+logs/
+
+# 临时文件
+tmp/
+temp/
+
+# 构建产物
+dashboard/dist/
+dashboard/build/
+dashboard/node_modules/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# 敏感信息
+secrets/
+*.key
+*.pem

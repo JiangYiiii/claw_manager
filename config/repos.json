@@ -1,0 +1,20 @@
+{
+  "repositories": {
+    "traffic-ai": {
+      "url": "https://github.com/JiangYiiii/traffic-ai.git",
+      "branch": "main",
+      "description": "Traffic AI 模型代理服务"
+    },
+    "claw-plugin-manager": {
+      "url": "https://github.com/JiangYiiii/claw_plugin_manager.git",
+      "branch": "main",
+      "description": "OpenClaw MCP 插件管理器"
+    },
+    "claw-credential-manager": {
+      "url": "https://github.com/JiangYiiii/claw_credential_manager.git",
+      "branch": "main",
+      "description": "凭证管理服务"
+    }
+  },
+  "notes": "已从本地项目自动获取 Git 远程地址"
+}

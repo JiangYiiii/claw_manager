@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OpenClaw Credential Manager</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .container {
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            padding: 40px;
+            width: 90%;
+            max-width: 400px;
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 30px;
+            font-size: 24px;
+        }
+        .logo {
+            text-align: center;
+            font-size: 48px;
+            margin-bottom: 20px;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #555;
+            font-weight: 500;
+        }
+        input {
+            width: 100%;
+            padding: 12px 16px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+        input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        button {
+            width: 100%;
+            padding: 14px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        button:hover {
+            transform: translateY(-2px);
+        }
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+        .error {
+            background: #fee;
+            border: 1px solid #fcc;
+            color: #c33;
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-size: 14px;
+        }
+        .success {
+            background: #efe;
+            border: 1px solid #cfc;
+            color: #3c3;
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-size: 14px;
+        }
+        .hidden { display: none; }
+        .tabs {
+            display: flex;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #e0e0e0;
+        }
+        .tab {
+            flex: 1;
+            padding: 12px;
+            text-align: center;
+            cursor: pointer;
+            color: #666;
+            border-bottom: 3px solid transparent;
+            margin-bottom: -2px;
+            transition: all 0.3s;
+        }
+        .tab.active {
+            color: #667eea;
+            border-bottom-color: #667eea;
+            font-weight: 600;
+        }
+        .info {
+            background: #e3f2fd;
+            border-left: 4px solid #2196f3;
+            padding: 12px;
+            margin-top: 20px;
+            font-size: 13px;
+            color: #1565c0;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="logo">🦞</div>
+        <h1>OpenClaw 凭证管理</h1>
+
+        <div class="tabs">
+            <div class="tab active" onclick="switchTab('password')">密码登录</div>
+            <div class="tab" onclick="switchTab('token')">Token 登录</div>
+        </div>
+
+        <div id="error" class="error hidden"></div>
+        <div id="success" class="success hidden"></div>
+
+        <!-- 密码登录表单 -->
+        <form id="passwordForm" onsubmit="loginWithPassword(event)">
+            <div class="form-group">
+                <label for="password">凭证密码</label>
+                <input type="password" id="password" name="password"
+                       placeholder="输入您的密码" required autocomplete="current-password">
+            </div>
+            <button type="submit" id="passwordBtn">登录</button>
+            <div class="info">
+                💡 默认密码为 .env 中的 CRED_TOKEN 前8位
+            </div>
+        </form>
+
+        <!-- Token 登录表单 -->
+        <form id="tokenForm" class="hidden" onsubmit="loginWithToken(event)">
+            <div class="form-group">
+                <label for="token">API Token</label>
+                <input type="password" id="token" name="token"
+                       placeholder="输入完整的 API Token" required>
+            </div>
+            <button type="submit" id="tokenBtn">验证并登录</button>
+            <div class="info">
+                💡 使用 .env 中的完整 CRED_TOKEN
+            </div>
+        </form>
+    </div>
+
+    <script>
+        const API_BASE = window.location.origin.replace(':8003', ':8002');
+
+        function switchTab(tab) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            event.target.classList.add('active');
+
+            if (tab === 'password') {
+                document.getElementById('passwordForm').classList.remove('hidden');
+                document.getElementById('tokenForm').classList.add('hidden');
+            } else {
+                document.getElementById('passwordForm').classList.add('hidden');
+                document.getElementById('tokenForm').classList.remove('hidden');
+            }
+            hideMessages();
+        }
+
+        function hideMessages() {
+            document.getElementById('error').classList.add('hidden');
+            document.getElementById('success').classList.add('hidden');
+        }
+
+        function showError(message) {
+            const errorEl = document.getElementById('error');
+            errorEl.textContent = message;
+            errorEl.classList.remove('hidden');
+            document.getElementById('success').classList.add('hidden');
+        }
+
+        function showSuccess(message) {
+            const successEl = document.getElementById('success');
+            successEl.textContent = message;
+            successEl.classList.remove('hidden');
+            document.getElementById('error').classList.add('hidden');
+        }
+
+        async function loginWithPassword(event) {
+            event.preventDefault();
+            hideMessages();
+
+            const password = document.getElementById('password').value;
+            const btn = document.getElementById('passwordBtn');
+            btn.disabled = true;
+            btn.textContent = '验证中...';
+
+            try {
+                // 使用密码验证接口（需要后端支持）
+                const response = await fetch(`${API_BASE}/api/auth/password`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ password })
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    sessionStorage.setItem('claw_token', data.token || password);
+                    showSuccess('✅ 登录成功！正在跳转...');
+                    setTimeout(() => {
+                        window.location.href = '/dashboard.html';
+                    }, 1000);
+                } else {
+                    const error = await response.json();
+                    showError(error.error || '密码错误');
+                }
+            } catch (err) {
+                // 降级方案：直接使用密码作为 token 的一部分
+                showError('⚠️ 后端不支持密码登录，请使用 Token 登录');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '登录';
+            }
+        }
+
+        async function loginWithToken(event) {
+            event.preventDefault();
+            hideMessages();
+
+            const token = document.getElementById('token').value;
+            const btn = document.getElementById('tokenBtn');
+            btn.disabled = true;
+            btn.textContent = '验证中...';
+
+            try {
+                // 验证 token
+                const response = await fetch(`${API_BASE}/v1/credentials`, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'X-API-Key': token
+                    }
+                });
+
+                if (response.ok) {
+                    sessionStorage.setItem('claw_token', token);
+                    showSuccess('✅ Token 验证成功！正在跳转...');
+                    setTimeout(() => {
+                        window.location.href = '/dashboard.html';
+                    }, 1000);
+                } else {
+                    showError('Token 无效或已过期');
+                }
+            } catch (err) {
+                showError('连接失败：' + err.message);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '验证并登录';
+            }
+        }
+
+        // 检查是否已登录
+        if (sessionStorage.getItem('claw_token')) {
+            window.location.href = '/dashboard.html';
+        }
+    </script>
+</body>
+</html>

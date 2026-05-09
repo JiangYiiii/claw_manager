@@ -1,0 +1,198 @@
+version: '3.8'
+
+services:
+  # ============================================
+  # 凭证管理器 (最底层依赖)
+  # ============================================
+  claw-credential-manager:
+    build:
+      context: .
+      dockerfile: dockerfiles/credential-manager.Dockerfile
+      target: production
+      args:
+        - GIT_REPO=${CREDENTIAL_MANAGER_REPO}
+        - GIT_BRANCH=${CREDENTIAL_MANAGER_BRANCH:-main}
+        - GIT_TOKEN=${GIT_TOKEN}
+    image: claw-credential-manager:${VERSION:-latest}
+    container_name: claw-credential-manager
+    restart: unless-stopped
+    ports:
+      - "${CREDENTIAL_MANAGER_PORT:-8002}:8002"
+      - "${CREDENTIAL_MANAGER_WEB_PORT:-8003}:8080"
+    environment:
+      - VAULT_PATH=/vault
+      - CLAW_VAULT_PASSWORD=${CRED_TOKEN}
+      - WEB_PORT=8080
+      - API_BASE=http://127.0.0.1:8002
+      - CLAW_API_KEY=${CRED_TOKEN}
+      - TZ=Asia/Shanghai
+    volumes:
+      - ~/openclaw-data/claw-credential-manager:/app/config:ro
+      - credential-vault:/vault
+      - /etc/localtime:/etc/localtime:ro
+    networks:
+      - openclaw-net
+    extra_hosts:
+      - "host.containers.internal:host-gateway"
+
+  # ============================================
+  # Traffic AI Control (模型服务 - Web控制台)
+  # ============================================
+  traffic-ai-control:
+    build:
+      context: .
+      dockerfile: dockerfiles/traffic-ai.Dockerfile
+      args:
+        - GIT_REPO=${TRAFFIC_AI_REPO}
+        - GIT_BRANCH=${TRAFFIC_AI_BRANCH:-main}
+        - GIT_TOKEN=${GIT_TOKEN}
+        - BUILD_TARGET=control
+    image: traffic-ai-control:${VERSION:-latest}
+    container_name: traffic-ai-control
+    restart: unless-stopped
+    ports:
+      - "${TRAFFIC_AI_CONSOLE_PORT:-18080}:18080"
+      - "${TRAFFIC_AI_ADMIN_PORT:-8083}:8083"
+    environment:
+      - BUILD_TARGET=control
+      - TZ=Asia/Shanghai
+    volumes:
+      - ~/openclaw-data/traffic-ai:/app/configs:ro
+      - /etc/localtime:/etc/localtime:ro
+    networks:
+      - openclaw-net
+    extra_hosts:
+      - "host.containers.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:18080/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  # ============================================
+  # Traffic AI Gateway (模型代理 API)
+  # ============================================
+  traffic-ai-gateway:
+    build:
+      context: .
+      dockerfile: dockerfiles/traffic-ai.Dockerfile
+      args:
+        - GIT_REPO=${TRAFFIC_AI_REPO}
+        - GIT_BRANCH=${TRAFFIC_AI_BRANCH:-main}
+        - GIT_TOKEN=${GIT_TOKEN}
+        - BUILD_TARGET=gateway
+    image: traffic-ai-gateway:${VERSION:-latest}
+    container_name: traffic-ai-gateway
+    restart: unless-stopped
+    ports:
+      - "8081:8081"
+    environment:
+      - BUILD_TARGET=gateway
+      - TZ=Asia/Shanghai
+    volumes:
+      - ~/openclaw-data/traffic-ai:/app/configs:ro
+      - /etc/localtime:/etc/localtime:ro
+    networks:
+      - openclaw-net
+    extra_hosts:
+      - "host.containers.internal:host-gateway"
+    depends_on:
+      - traffic-ai-control
+    healthcheck:
+      test: ["CMD", "sh", "-c", "echo | nc -w1 localhost 8081"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  # ============================================
+  # MCP 插件管理器
+  # ============================================
+  claw-plugin-manager:
+    build:
+      context: .
+      dockerfile: dockerfiles/plugin-manager.Dockerfile
+      args:
+        - GIT_REPO=${PLUGIN_MANAGER_REPO}
+        - GIT_BRANCH=${PLUGIN_MANAGER_BRANCH:-main}
+        - GIT_TOKEN=${GIT_TOKEN}
+    image: claw-plugin-manager:${VERSION:-latest}
+    container_name: claw-plugin-manager
+    restart: unless-stopped
+    ports:
+      - "${PLUGIN_MANAGER_PORT:-9000}:9000"
+      - "8090:8090"
+    environment:
+      - NODE_ENV=production
+      - TZ=Asia/Shanghai
+    volumes:
+      - ~/openclaw-data/claw-plugin-manager:/app/config:ro
+      - /etc/localtime:/etc/localtime:ro
+    networks:
+      - openclaw-net
+    extra_hosts:
+      - "host.containers.internal:host-gateway"
+
+  # ============================================
+  # TEI Embedding 模型服务
+  # ============================================
+  tei-embedding:
+    image: ghcr.io/huggingface/text-embeddings-inference:cpu-arm64-latest
+    container_name: tei-embedding
+    restart: unless-stopped
+    ports:
+      - "8088:80"
+    volumes:
+      - ~/Documents/codedev/traffic-ai/.cache/tei-models/bge-small-en-v1.5:/data/models/BAAI/bge-small-en-v1.5:ro
+    environment:
+      - HUGGINGFACE_HUB_CACHE=/data
+      - TZ=Asia/Shanghai
+    networks:
+      - openclaw-net
+    command:
+      - --model-id
+      - /data/models/BAAI/bge-small-en-v1.5
+      - --served-model-name
+      - bge-small-en-v1.5
+
+  # ============================================
+  # 统一管理界面 Dashboard (后续添加)
+  # ============================================
+  # openclaw-dashboard:
+  #   build:
+  #     context: ./dashboard
+  #     dockerfile: ../dockerfiles/dashboard.Dockerfile
+  #   image: openclaw-dashboard:${VERSION:-latest}
+  #   container_name: openclaw-dashboard
+  #   restart: unless-stopped
+  #   ports:
+  #     - "${DASHBOARD_PORT:-9000}:9000"
+  #   environment:
+  #     - TRAFFIC_AI_CONSOLE_URL=http://traffic-ai-console:3001
+  #     - TRAFFIC_AI_ADMIN_URL=http://traffic-ai-admin:3002
+  #     - PLUGIN_MANAGER_URL=http://claw-plugin-manager:8001
+  #     - CREDENTIAL_MANAGER_URL=http://claw-credential-manager:8002
+  #   networks:
+  #     - openclaw-net
+  #   depends_on:
+  #     - traffic-ai-console
+  #     - traffic-ai-admin
+  #     - claw-plugin-manager
+  #     - claw-credential-manager
+
+# ============================================
+# Volumes
+# ============================================
+volumes:
+  credential-vault:
+    driver: local
+    name: openclaw-credential-vault
+
+# ============================================
+# Networks
+# ============================================
+networks:
+  openclaw-net:
+    name: openclaw-net
+    driver: bridge

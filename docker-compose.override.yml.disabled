@@ -1,0 +1,123 @@
+# docker-compose.override.yml
+# 开发环境配置 - 挂载本地代码，修改后重启容器即可生效
+#
+# 使用方法：
+#   1. 确保 .env 中设置了 DEV_MODE=true
+#   2. 使用 ./dev-start.sh 或 podman-compose up -d
+#   3. 修改代码后：./dev-start.sh restart <service-name>
+#
+# 注意：
+#   - Go 项目需要在容器内重新编译（约 3-10 秒）
+#   - Node.js 项目重启即可生效
+#   - 生产环境删除或重命名此文件
+
+version: '3.8'
+
+services:
+  # ============================================
+  # Traffic AI Control (Go 项目 - 开发模式)
+  # ============================================
+  traffic-ai-control:
+    # 使用 builder 镜像而非 production 镜像，包含 Go 编译器
+    image: golang:1.23-alpine
+    volumes:
+      # 挂载源码到临时目录，避免污染宿主机
+      - ~/Documents/codedev/traffic-ai:/app/src-readonly:ro
+      # 配置文件
+      - ~/openclaw-data/traffic-ai:/app/configs:ro
+    working_dir: /app/build
+    environment:
+      - DEV_MODE=true
+      - GOTOOLCHAIN=auto
+      - TZ=Asia/Shanghai
+    # 开发模式：复制代码到可写目录，编译并运行
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -e
+        apk add --no-cache ca-certificates curl tzdata
+        echo "=== DEV MODE: Copying source code ==="
+        cp -r /app/src-readonly /app/build
+        cd /app/build
+        echo "=== Building control ==="
+        go mod download
+        go build -o /tmp/control ./cmd/control
+        echo "=== Build complete, starting control ==="
+        exec /tmp/control
+
+  # ============================================
+  # Traffic AI Gateway (Go 项目 - 开发模式)
+  # ============================================
+  traffic-ai-gateway:
+    image: golang:1.23-alpine
+    volumes:
+      - ~/Documents/codedev/traffic-ai:/app/src-readonly:ro
+      - ~/openclaw-data/traffic-ai:/app/configs:ro
+    working_dir: /app/build
+    environment:
+      - DEV_MODE=true
+      - GOTOOLCHAIN=auto
+      - TZ=Asia/Shanghai
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -e
+        apk add --no-cache ca-certificates curl tzdata
+        echo "=== DEV MODE: Copying source code ==="
+        cp -r /app/src-readonly /app/build
+        cd /app/build
+        echo "=== Building gateway ==="
+        go mod download
+        go build -o /tmp/gateway ./cmd/gateway
+        echo "=== Build complete, starting gateway ==="
+        exec /tmp/gateway
+
+  # ============================================
+  # MCP 插件管理器 (Node.js - 开发模式)
+  # ============================================
+  claw-plugin-manager:
+    volumes:
+      # Node.js 直接挂载源码即可
+      - ~/Documents/codedev/claw_plugin_manager/src:/app/src:ro
+      - ~/Documents/codedev/claw_plugin_manager/package.json:/app/package.json:ro
+      # 保留 node_modules（使用容器内的，避免宿主机依赖问题）
+    environment:
+      - DEV_MODE=true
+      - NODE_ENV=production
+    # Node.js 不需要重新构建，直接运行即可
+    command: ["node", "src/index.js", "--config", "config/config.yaml"]
+
+  # ============================================
+  # 凭证管理器 (Go + Node.js - 开发模式)
+  # ============================================
+  claw-credential-manager:
+    image: golang:1.23-alpine
+    volumes:
+      - ~/Documents/codedev/claw_credential_manager:/app/src-readonly:ro
+      - ~/openclaw-data/claw-credential-manager:/app/config:ro
+      - credential-vault:/vault
+    working_dir: /app/build
+    environment:
+      - DEV_MODE=true
+      - GOTOOLCHAIN=auto
+      - TZ=Asia/Shanghai
+      - VAULT_PATH=/vault
+      - CLAW_VAULT_PASSWORD=${CRED_TOKEN}
+      - WEB_PORT=8080
+      - API_BASE=http://127.0.0.1:8002
+      - CLAW_API_KEY=${CRED_TOKEN}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -e
+        apk add --no-cache ca-certificates tzdata nodejs npm bash
+        echo "=== DEV MODE: Copying source code ==="
+        cp -r /app/src-readonly /app/build
+        cd /app/build
+        echo "=== Building credential manager ==="
+        go mod download
+        go build -o /tmp/claw-vault-server ./cmd/server
+        echo "=== Build complete, starting services ==="
+        /tmp/claw-vault-server -config /app/config/config.yaml &
+        cd /app/build/web
+        exec node standalone-server.js
