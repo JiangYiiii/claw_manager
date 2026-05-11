@@ -121,8 +121,8 @@ services:
     container_name: claw-plugin-manager
     restart: unless-stopped
     ports:
-      - "${PLUGIN_MANAGER_PORT:-9000}:9000"
-      - "8090:8090"
+      - "${PLUGIN_MANAGER_WEB_PORT:-19000}:19000"
+      - "${PLUGIN_MANAGER_PORT:-18091}:18091"
     environment:
       - NODE_ENV=production
       - TZ=Asia/Shanghai
