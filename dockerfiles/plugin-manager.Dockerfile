@@ -30,14 +30,25 @@ RUN npm install --production
 FROM node:${NODE_VERSION} AS production
 WORKDIR /app
 
-# Install tzdata for timezone support
-RUN apk add --no-cache tzdata
+# Install runtime deps for MCP sidecars
+RUN apk add --no-cache \
+    tzdata \
+    python3 \
+    py3-pip \
+    ffmpeg \
+    yt-dlp
 
 # Copy dependencies and code
 COPY --from=builder /app/package*.json ./
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/src ./src
 COPY --from=builder /app/config ./config
+COPY --from=builder /app/mcp-servers ./mcp-servers
+
+# Install Python deps for douyin-analyzer sidecar
+RUN python3 -m venv /opt/douyin-analyzer-venv && \
+    /opt/douyin-analyzer-venv/bin/pip install --no-cache-dir --upgrade pip setuptools wheel && \
+    /opt/douyin-analyzer-venv/bin/pip install --no-cache-dir -r /app/mcp-servers/douyin-analyzer/requirements.txt
 
 ENV NODE_ENV=production
 ENV TZ=Asia/Shanghai
